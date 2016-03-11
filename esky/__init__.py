@@ -18,18 +18,19 @@ See https://github.com/cloudmatrix/esky/ for more information:
 
 """
 
-from __future__ import with_statement
-from __future__ import absolute_import
+
+
 
 __ver_major__ = 0
 __ver_minor__ = 9
-__ver_patch__ = 10
-__ver_sub__ = "dev"
+__ver_patch__ = 9
+__ver_sub__ = ""
 __ver_tuple__ = (__ver_major__, __ver_minor__, __ver_patch__, __ver_sub__)
 __version__ = "%d.%d.%d%s" % __ver_tuple__
 
 import sys
 import errno
+import collections
 
 if sys.platform != "win32":
     import fcntl
@@ -88,7 +89,7 @@ def base64():
 @lazy_import
 def pickle():
     try:
-        import cPickle as pickle
+        import pickle as pickle
     except ImportError:
         import pickle
     return pickle
@@ -165,7 +166,7 @@ class Esky(object):
 
     def _set_version_finder(self, version_finder):
         if version_finder is not None:
-            if isinstance(version_finder, basestring):
+            if isinstance(version_finder, str):
                 kwds = {"download_url": version_finder}
                 version_finder = esky.finder.DefaultVersionFinder(**kwds)
         self.__version_finder = version_finder
@@ -251,7 +252,7 @@ class Esky(object):
         #  Try to make the "locked" directory.
         try:
             os.mkdir(lockdir)
-        except OSError, e:
+        except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
             #  Is it stale?  If so, break it and try again.
@@ -266,7 +267,7 @@ class Esky(object):
                     return self.lock(num_retries+1)
                 else:
                     raise EskyLockedError
-            except OSError, e:
+            except OSError as e:
                 if e.errno not in (errno.ENOENT, errno.ENOTDIR,):
                     raise
                 return self.lock(num_retries+1)
@@ -352,7 +353,7 @@ class Esky(object):
                 act = lambda: True
                 while True:
                     try:
-                        if callable(act):
+                        if isinstance(act, collections.Callable):
                             res = act()
                         elif len(act) == 1:
                             res = act[0]()
@@ -365,7 +366,7 @@ class Esky(object):
                     except Exception:
                         act = actions.throw(*sys.exc_info())
                     else:
-                        act = actions.next()
+                        act = next(actions)
             except StopIteration:
                 return success
         finally:
@@ -530,19 +531,12 @@ class Esky(object):
         appdata = pickle.dumps(self, pickle.HIGHEST_PROTOCOL)
         exe = exe + [base64.b64encode(appdata).decode("ascii")]
 
-        @atexit.register
-        def spawn_cleanup():
-            rnul = open(os.devnull, "r")
-            wnul = open(os.devnull, "w")
-            if sys.platform == "win32":
-                if sys.hexversion >= 0x02060000:
-                    kwds = dict(close_fds=True)
-                else:
-                    kwds = {}
-            else:
-                kwds = dict(stdin=rnul, stdout=wnul, stderr=wnul,
-                            close_fds=True)
-            subprocess.Popen(exe, **kwds)
+        # unregister any previous atexit spawn cleanup commands
+        atexit.unregister(spawn_cleanup)
+
+        # register cleanup for atexit
+        atexit.register(spawn_cleanup, exe)
+
 
     def _try_remove(self, tdir, path, manifest=[]):
         """Try to remove the file/directory at given path in the target dir.
@@ -580,7 +574,7 @@ class Esky(object):
                 os.rmdir(fullpath)
             else:
                 os.unlink(fullpath)
-        except EnvironmentError, e:
+        except EnvironmentError as e:
             if e.errno not in self._errors_to_ignore:
                 raise
             return False
@@ -629,8 +623,8 @@ class Esky(object):
                         raise
                     try:
                         self.get_root()
-                    except Exception, e:
-                        raise exc_type, exc_value, exc_traceback
+                    except Exception as e:
+                        raise exc_type(exc_value).with_traceback(exc_traceback)
                     else:
                         got_root = True
                         self._do_auto_update(version, callback)
@@ -646,13 +640,13 @@ class Esky(object):
                     raise
                 try:
                     self.get_root()
-                except Exception, e:
-                    raise exc_type, exc_value, exc_traceback
+                except Exception as e:
+                    raise exc_type(exc_value).with_traceback(exc_traceback)
                 else:
                     got_root = True
                     callback({"status": "cleaning up"})
                     cleaned = self.cleanup()
-        except Exception, e:
+        except Exception as e:
             callback({"status": "error", "exception": e})
             raise
         else:
@@ -772,7 +766,7 @@ class Esky(object):
             vsdir = os.path.join(self.appdir, ESKY_APPDATA_DIR)
             try:
                 os.mkdir(vsdir)
-            except EnvironmentError, e:
+            except EnvironmentError as e:
                 if e.errno not in (errno.EEXIST,):
                     raise
             else:
@@ -876,13 +870,13 @@ class Esky(object):
             else:
                 try:
                     f = open(lockfile, "r")
-                except EnvironmentError, e:
+                except EnvironmentError as e:
                     if e.errno != errno.ENOENT:
                         raise
                 else:
                     try:
                         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    except EnvironmentError, e:
+                    except EnvironmentError as e:
                         if e.errno not in (errno.EACCES, errno.EAGAIN,):
                             raise
                         msg = "version in use: %s" % (version,)
@@ -986,3 +980,16 @@ def run_startup_hooks():
     # Let esky.sudo run its hooks.
     import esky.sudo
     esky.sudo.run_startup_hooks()
+
+def spawn_cleanup(exe):
+    rnul = open(os.devnull, "r")
+    wnul = open(os.devnull, "w")
+    if sys.platform == "win32":
+        if sys.hexversion >= 0x02060000:
+            kwds = dict(close_fds=True)
+        else:
+            kwds = {}
+    else:
+        kwds = dict(stdin=rnul, stdout=wnul, stderr=wnul,
+                    close_fds=True)
+    subprocess.Popen(exe, **kwds)
