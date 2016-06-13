@@ -59,6 +59,9 @@ def freeze(dist):
         base = None
         if exe.gui_only and sys.platform == "win32":
             base = "Win32GUI"
+        if 'base' in exe._kwds:
+            base = exe._kwds['base']
+            del exe._kwds['base']
         executables.append(cx_Freeze.Executable(exe.script,base=base,targetName=exe.name,icon=exe.icon,**exe._kwds))
     #  Freeze up the executables
     f = cx_Freeze.Freezer(executables,**kwds)
