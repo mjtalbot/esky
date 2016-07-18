@@ -133,12 +133,12 @@ if sys.version_info[:2] < (3, 4):
     def imp():
         import imp
         return imp
-        
+
     @lazy_import
     def marshal():
         import marshal
         return marshal
-        
+
     @lazy_import
     def struct():
         import struct
@@ -441,6 +441,8 @@ def is_core_dependency(filenm):
     bootstrapper).  Currently this includes only the python DLL and the
     MSVCRT private assembly.
     """
+    if re.match("^(lib)?MSVCR\\d*\\.[a-z\d\\.]*$",filenm):
+        return True
     if re.match("^(lib)?python\\d[\\d\\.]*\\.[a-z\d\\.]*$",filenm):
         return True
     if filenm.startswith("Microsoft.") and filenm.endswith(".CRT"):
@@ -579,7 +581,7 @@ def compile_to_bytecode(source_code, compile_filename=None):
         code = loader.source_to_code(source_code, '<string>')
         bytecode = importlib._bootstrap._code_to_bytecode(code, mtime=0, source_size=0)
     else:
-        loader = importlib._bootstrap_external.SourceLoader()    
+        loader = importlib._bootstrap_external.SourceLoader()
         code = loader.source_to_code(source_code, '<string>')
         bytecode = importlib._bootstrap_external._code_to_bytecode(code, mtime=0, source_size=0)
 
